@@ -1,19 +1,32 @@
 version: '3.1'
 
-volumes:
-    prometheus_data: {}
-    grafana_data: {}
+# Assumes that the persistnat vlumes have been created already (TODO)
+#volumes:
+#    prometheus_data:
+#      external:
+#        name: ${PROMETHEUS_DATA}
+#    grafana_data:
+#      external:
+#        name: ${GRAFANA_DATA}
 
 networks:
-  front-tier:
+  webproxy:
+    external:
+      name: ${NETWORK}
+  webservices:
+    external:
+      name: ${INTERNAL_NETWORK}
 
 services:
 
   prometheus:
-    image: prom/prometheus:v2.1.0
+    container_name: ${PROMETHEUS} 
+    image: prom/prometheus:latest
+    user: ${UID}:${GID}
+    hostname: ${PROMETHEUS}
     volumes:
-      - ./prometheus/:/etc/prometheus/
-      - prometheus_data:/prometheus
+      - ${PROMETHEUS_DATA_DIR}/conf/:/etc/prometheus/
+      - ${PROMETHEUS_DATA_DIR}/data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -22,7 +35,7 @@ services:
     ports:
       - 9090:9090
     networks:
-      - front-tier
+      - webservices
     restart: always
 #    deploy:
 #      placement:
@@ -30,7 +43,10 @@ services:
 #          - node.hostname == ${HOSTNAME}
 
   coinmarketcap-exporter:
-    image: bcawthra/coinmarketcap-exporter:latest
+    container_name: ${COINMARKETCAP_EXPORTER}
+    image: cryptohub/coinmarketcap-exporter:latest
+    user: ${UID}:${GID}
+    hostname: ${COINMARKETCAP_EXPORTER}
     deploy:
 #      placement:
 #        constraints:
@@ -38,20 +54,30 @@ services:
     ports:
         - 9101:9101
     networks:
-        - front-tier
+        - webservices
     restart: always
 
 
   grafana:
+    container_name: ${GRAFANA}
     image: grafana/grafana
+    user: ${UID}:${GID}
+    hostname: ${GRAFANA}
     depends_on:
-      - prometheus
-    ports:
-      - 3000:3000
+      - ${PROMETHEUS}
+     #ports:
+     # - 3000:3000
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ${GRAFANA_DATA_DIR}/data:/var/lib/grafana
     env_file:
       - config.monitoring
+    environment:
+      - VIRTUAL_HOST=tracker.cryptohub.solutions
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=tracker.cryptohub.solutions
+      - LETSENCRYPT_EMAIL=cyptohub.solutions@gmail.com
+
     networks:
-      - front-tier
+      - webproxy
+      - webservices
     restart: always
